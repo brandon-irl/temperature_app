@@ -8,12 +8,11 @@ class TemperaturesController < ApplicationController
   UNITS = %w[metric imperial].freeze
   APPID_LENGTH = 32
 
-  def validate_q
-    true unless params[:q].nil? || params[:q].length > 10 || !params[:q].respond_to?(:join)
-  end
-
-  def validate_appid
-    true unless params[:appid].nil? || params[:appid].length != 32
+  def validate_params
+    params.require(%i[q appid])
+    raise 'Too many cities' if params[:q].length > 10
+    raise 'cities must be an array' unless params[:q].respond_to?(:join)
+    raise 'appid is invalid' if params[:appid].length != 32
   end
 
   def sanitize_params
@@ -39,40 +38,44 @@ class TemperaturesController < ApplicationController
   end
 
   def show
-    unless validate_q && validate_appid
-      render json: { code: 400, message: 'bad request' }, status: :bad_request and return
+    begin
+      validate_params
+      sanitize_params
+    rescue StandardError => e
+      render json: { code: 400, message: e }, status: :bad_request and return
     end
 
-    sanitize_params
+    begin
+      result = Rails.cache.fetch(params[:appid] + params[:q].join(',') + params[:units], expires_in: 5.minutes) do
+        hash = { cities: [], highest: [], lowest: [] }
+        high_temp = FIXNUM_MIN
+        low_temp =  FIXNUM_MAX
+        params[:q].each do |city|
+          main = fetch_temperatures(city, params[:appid], params[:units])
+          # set cities property
+          hash[:cities].push({ name: city, temperatures: main })
+          next if main['temp'].nil?
 
-    Rails.cache.fetch(params[:appid] + params[:q].join(',') + params[:units], expires_in: 5.minutes) do
-      hash = { cities: [], highest: [], lowest: [] }
-      high_temp = FIXNUM_MIN
-      low_temp =  FIXNUM_MAX
-      params[:q].each do |city|
-        main = fetch_temperatures(city, params[:appid], params[:units])
-        # set cities property
-        hash[:cities].push({ name: city, temperatures: main })
-        next if main['temp'].nil?
-
-        # set highest
-        if hash[:highest].nil? || main['temp'] > high_temp
-          high_temp = main['temp']
-          hash[:highest] = [city]
-        elsif main['temp'] == high_temp
-          hash[:highest].push(city)
+          # set highest
+          if hash[:highest].nil? || main['temp'] > high_temp
+            high_temp = main['temp']
+            hash[:highest] = [city]
+          elsif main['temp'] == high_temp
+            hash[:highest].push(city)
+          end
+          # set lowest
+          if hash[:lowest].nil? || main['temp'] < low_temp
+            low_temp = main['temp']
+            hash[:lowest] = [city]
+          elsif main['temp'] == low_temp
+            hash[:lowest].push(city)
+          end
         end
-        # set lowest
-        if hash[:lowest].nil? || main['temp'] < low_temp
-          low_temp = main['temp']
-          hash[:lowest] = [city]
-        elsif main['temp'] == low_temp
-          hash[:lowest].push(city)
-        end
+        hash
       end
-      render json: hash
+      render json: result
+    rescue StandardError => e
+      render json: { message: 'An unexpected error occurred. Please try again later.', detail: e }
     end
-  rescue StandardError
-    render json: { message: 'An unexpected error occurred. Please try again later.' }
   end
 end
