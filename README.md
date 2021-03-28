@@ -15,11 +15,12 @@ This app uses [Open Weather Map](https://openweathermap.org/) to source temperat
 You can also reach this endpoint on the root domain
 > ht<span>tps://young-escarpment-01111.herokuapp.com?q[]=</span><span style="color:orange">{city name}</span>&q[]=<span style="color:orange">{second city name}</span>&appid=<span style="color:orange">{API key}</span>&units=<span style="color:orange">imperial</span>
 ### Parameters
-||||||
+parameter||type|example|description
 ---|---|---|---| ---
 `q`|*required*|array|new%20york%20city|One or more city names
-`appid`|*required*|string| | Your unique API key from openweathermap.org
+`appid`|*required*|string| | Your unique API key from openweathermap.org. Must be 32 characters long.
 `units`|*optional*|string|<ul><li>imperial</li><li>metric</li></ul>|`imperial` for Farenheit, `metric` for Celcius. If absent, `metric` will be used by default.
+
 ### Notes
 Queries are cached using the parameters as key and expire after 5 minutes. Individual city values are also cached and expire after 1 min.
 
